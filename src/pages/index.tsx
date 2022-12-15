@@ -4,10 +4,12 @@ import Link from "next/link";
 import { signIn, signOut, useSession } from "next-auth/react";
 
 import { trpc } from "../utils/trpc";
+import { text } from "stream/consumers";
+import { Fragment, useState } from "react";
 
 const Home: NextPage = () => {
-  const hello = trpc.example.hello.useQuery({ text: "from tRPC" });
-
+  const messages = trpc.example.getAll.useQuery();
+  
   return (
     <>
       <Head>
@@ -45,9 +47,15 @@ const Home: NextPage = () => {
             </Link>
           </div>
           <div className="flex flex-col items-center gap-2">
-            <p className="text-2xl text-white">
-              {hello.data ? hello.data.greeting : "Loading tRPC query..."}
-            </p>
+            <div className="text-2xl text-white">
+              {messages.data ? messages.data.map((message) => 
+              <Fragment key={message.id}>
+                <div>
+                  {message.user.name} said {`"${message.message}"`}
+                </div>
+              </Fragment>
+              ) : "Loading tRPC query..."}
+            </div>
             <AuthShowcase />
           </div>
         </div>
@@ -61,23 +69,45 @@ export default Home;
 const AuthShowcase: React.FC = () => {
   const { data: sessionData } = useSession();
 
-  const { data: secretMessage } = trpc.auth.getSecretMessage.useQuery(
-    undefined, // no input
-    { enabled: sessionData?.user !== undefined },
-  );
+
+  const [message, setMessage] = useState('')
+  const mutator = trpc.auth.postSecretMessage.useMutation()
+  const SubmitHandler = () => {
+    console.log('Submitting message')
+    mutator.mutateAsync({message}, {
+      onSuccess: ()=> {
+        console.log('It worked!')
+        setMessage('')
+      },
+      onError: () => {
+        console.log('It failed')
+        setMessage('')
+      }
+    })
+  }
+  
+
 
   return (
     <div className="flex flex-col items-center justify-center gap-4">
       <p className="text-center text-2xl text-white">
         {sessionData && <span>Logged in as {sessionData.user?.name}</span>}
-        {secretMessage && <span> - {secretMessage}</span>}
       </p>
+      <div className="text-center text-2xl text-white">
+
+      {sessionData &&  (<div className="flex flex-col gap-2">
+        <span>Leave a message!  </span>
+      <input className="bg-transparent rounded border border-1 text-white" value={message} onChange={(e) => setMessage(e.target.value)} type={"text"}></input>
+      <button className="btn" onClick={SubmitHandler}>Submit</button></div>)}       
+      </div>
+      
       <button
         className="rounded-full bg-white/10 px-10 py-3 font-semibold text-white no-underline transition hover:bg-white/20"
         onClick={sessionData ? () => signOut() : () => signIn()}
       >
         {sessionData ? "Sign out" : "Sign in"}
       </button>
+      
     </div>
   );
 };
